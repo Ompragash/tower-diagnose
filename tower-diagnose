@@ -1,0 +1,196 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import os
+import json
+import ConfigParser
+import argparse
+import warnings
+import requests
+from requests.auth import HTTPBasicAuth
+
+#Disabling Warnings in python requests module
+requests.packages.urllib3.disable_warnings()
+
+class TowerDiagnose(object):
+    def __init__(self):
+        
+        # CLI args
+        self.cli_parse()
+
+        # Get Config
+        self.get_config()
+
+        # Calling Functions if defined
+        if self.args.ping:
+            self.tower_ping()
+        
+        if self.args.settings:
+            self.tower_settings()
+
+        if self.args.jobs:
+            self.tower_job()
+        
+        if self.args.inventoryupdate:
+            self.tower_inventory_update()
+        
+        if self.args.projectupdate:
+            self.tower_project_update()
+        
+        if self.args.workflowjobs:
+            self.tower_workflow_job()
+
+    def cli_parse(self):
+        parser = argparse.ArgumentParser(description='tower-diagnose pulls the required details from Ansible Tower using REST API and stores the output in a text file.')
+        parser.add_argument('--ping', action='store_true', help='Collects Ansible Tower ping details.')
+        parser.add_argument('--settings', metavar="", help='Collects Tower settings. Available options: all, authentication, jobs, saml, ldap, logging, system, ui, named-url')
+        parser.add_argument('--jobs', metavar="", help='Gets the details and stdout of a specific job. Eg: "--jobs 5"')
+        parser.add_argument('--inventory-update', metavar="", dest='inventoryupdate', help='Gets the details and stdout of an inventory update.')
+        parser.add_argument('--project-update', metavar="", dest='projectupdate', help='Gets the details and stdout of a project update.')
+        parser.add_argument('--workflow-jobs', metavar="", dest='workflowjobs',help='Collects the details of a workflow job.')
+        self.args = parser.parse_args()
+
+    def get_config(self):
+
+        config = ConfigParser.SafeConfigParser()
+        config_file = [
+            os.path.dirname(os.path.realpath(__file__)) + '/tower.ini',
+            "/etc/ansible/tower.ini",
+        ]
+
+        config.read(config_file)
+
+        if config.has_option('tower', 'url'):
+            self.tower_url = config.get('tower', 'url')
+        else:
+            self.tower_url = None
+
+        if not self.tower_url:
+            warnings.warn("Require Ansible Tower url, eg 'https://tower.example.com'")
+
+        if config.has_option('tower', 'username'):
+            self.tower_username = config.get('tower', 'username')
+        else:
+            self.tower_username = None
+
+        if not self.tower_username:
+            warnings.warn("Require Ansible Tower Username.")
+
+        if config.has_option('tower', 'password'):
+            self.passwd = config.get('tower', 'password', raw=True)
+        else:
+            self.passwd = None
+
+        if not self.passwd:
+            warnings.warn("Require Ansible Tower Password.")
+
+        if config.has_option('tower', 'ssl_verify'):
+            self.ssl_verify = config.getboolean('tower', 'ssl_verify')
+        else:
+            self.ssl_verify = False
+
+
+    def tower_ping(self):
+        details = requests.get(self.tower_url + '/api/v2/ping/',
+                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                verify=self.ssl_verify)
+
+        ping_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
+
+        f = open('ping.txt','w')
+        f.write(ping_details)
+        f.close()
+
+        print('Collected ping endpoint details.')
+
+    def tower_settings(self):
+        details = requests.get(self.tower_url + '/api/v2/settings/' + self.args.settings + '/',
+                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                verify=self.ssl_verify)
+
+        settings_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
+
+        f = open('settings_' + self.args.settings + '.txt','w')
+        f.write(settings_details)
+        f.close()
+
+        print('Collected Ansible Tower settings on "' + self.args.settings + '"')
+
+    def tower_job(self):
+        details = requests.get(self.tower_url + '/api/v2/jobs/' + self.args.jobs + '/', 
+                auth=HTTPBasicAuth(self.tower_username, self.passwd), 
+                verify=self.ssl_verify)
+
+        job_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
+
+        f = open('job_' + self.args.jobs + '.txt','w')
+        f.write(job_details)
+        f.close()
+
+        stdout = requests.get(self.tower_url + '/api/v2/jobs/' + self.args.jobs + '/stdout/?format=txt',
+                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                verify=self.ssl_verify)
+
+        f = open('job_' + self.args.jobs + '_stdout.txt','w')
+        f.write(stdout.text)
+        f.close()        
+
+        print('Collected details and stdout of Job ID ' + self.args.jobs)
+
+    def tower_inventory_update(self):
+        details = requests.get(self.tower_url + '/api/v2/inventory_updates/' + self.args.inventoryupdate + '/',
+                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                verify=self.ssl_verify)
+
+        inventory_update_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
+
+        f = open('inventory_update_' + self.args.inventoryupdate + '.txt','w')
+        f.write(inventory_update_details)
+        f.close()
+
+        stdout = requests.get(self.tower_url + '/api/v2/inventory_updates/' + self.args.inventoryupdate + '/stdout/?format=txt',
+                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                verify=self.ssl_verify)
+
+        f = open('inventory_update_' + self.args.inventoryupdate + '_stdout.txt','w')
+        f.write(stdout.text)
+        f.close()
+
+        print('Collected details and stdout of Inventory Update ID ' + self.args.inventoryupdate)
+
+    def tower_project_update(self):
+        details = requests.get(self.tower_url + '/api/v2/project_updates/' + self.args.projectupdate + '/',
+                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                verify=self.ssl_verify)
+
+        project_update_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
+
+        f = open('project_update_' + self.args.projectupdate + '.txt','w')
+        f.write(project_update_details)
+        f.close()
+
+        stdout = requests.get(self.tower_url + '/api/v2/project_updates/' + self.args.projectupdate + '/stdout/?format=txt',
+                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                verify=self.ssl_verify)
+
+        f = open('project_update_' + self.args.projectupdate + '_stdout.txt','w')
+        f.write(stdout.text)
+        f.close()
+
+        print('Collected details and stdout of Project Update ID ' + self.args.projectupdate)
+
+    def tower_workflow_job(self):
+        details = requests.get(self.tower_url + '/api/v2/workflow_jobs/' + self.args.workflowjobs + '/',
+                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                verify=self.ssl_verify)
+
+        workflow_job_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
+
+        f = open('workflow_job_' + self.args.workflowjobs + '.txt','w')
+        f.write(workflow_job_details)
+        f.close()
+
+        print('Collected details and stdout of Workflow Job ID ' + self.args.workflowjobs)
+
+
+TowerDiagnose()
