@@ -28,7 +28,7 @@ class TowerDiagnose(object):
         if self.args.settings:
             self.tower_settings()
 
-        if self.args.jobs:
+        if self.args.job:
             self.tower_job()
         
         if self.args.inventoryupdate:
@@ -44,10 +44,10 @@ class TowerDiagnose(object):
         parser = argparse.ArgumentParser(description='tower-diagnose pulls the required details from Ansible Tower using REST API and stores the output in a text file.')
         parser.add_argument('--ping', action='store_true', help='Collects Ansible Tower ping details.')
         parser.add_argument('--settings', metavar="", help='Collects Tower settings. Available options: all, authentication, jobs, saml, ldap, logging, system, ui, named-url')
-        parser.add_argument('--jobs', metavar="", help='Gets the details and stdout of a specific job. Eg: "--jobs 5"')
+        parser.add_argument('--job', metavar="", help='Gets the details and stdout of a specific job. Eg: "--jobs 5"')
         parser.add_argument('--inventory-update', metavar="", dest='inventoryupdate', help='Gets the details and stdout of an inventory update.')
         parser.add_argument('--project-update', metavar="", dest='projectupdate', help='Gets the details and stdout of a project update.')
-        parser.add_argument('--workflow-jobs', metavar="", dest='workflowjobs',help='Collects the details of a workflow job.')
+        parser.add_argument('--workflow-job', metavar="", dest='workflowjobs',help='Collects the details of a workflow job.')
         self.args = parser.parse_args()
 
     def get_config(self):
@@ -117,25 +117,25 @@ class TowerDiagnose(object):
         print('Collected Ansible Tower settings on "' + self.args.settings + '"')
 
     def tower_job(self):
-        details = requests.get(self.tower_url + '/api/v2/jobs/' + self.args.jobs + '/', 
+        details = requests.get(self.tower_url + '/api/v2/jobs/' + self.args.job + '/', 
                 auth=HTTPBasicAuth(self.tower_username, self.passwd), 
                 verify=self.ssl_verify)
 
         job_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
 
-        f = open('job_' + self.args.jobs + '.txt','w')
+        f = open('job_' + self.args.job + '.txt','w')
         f.write(job_details)
         f.close()
 
-        stdout = requests.get(self.tower_url + '/api/v2/jobs/' + self.args.jobs + '/stdout/?format=txt',
+        stdout = requests.get(self.tower_url + '/api/v2/jobs/' + self.args.job + '/stdout/?format=txt',
                 auth=HTTPBasicAuth(self.tower_username, self.passwd),
                 verify=self.ssl_verify)
 
-        f = open('job_' + self.args.jobs + '_stdout.txt','w')
+        f = open('job_' + self.args.job + '_stdout.txt','w')
         f.write(stdout.text)
         f.close()        
 
-        print('Collected details and stdout of Job ID ' + self.args.jobs)
+        print('Collected details and stdout of Job ID ' + self.args.job)
 
     def tower_inventory_update(self):
         details = requests.get(self.tower_url + '/api/v2/inventory_updates/' + self.args.inventoryupdate + '/',
