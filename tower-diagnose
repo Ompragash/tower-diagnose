@@ -3,24 +3,35 @@
 
 import os
 import json
-import ConfigParser
 import argparse
 import warnings
 import requests
 from requests.auth import HTTPBasicAuth
 
+try:
+    # python2
+    import ConfigParser as cparse
+except ImportError:
+    # python3
+    import configparser as cparse
+
 #Disabling Warnings in python requests module
 requests.packages.urllib3.disable_warnings()
 
-class TowerDiagnose(object):
+class TowerDiagnose:
     def __init__(self):
         
         # CLI args
         self.cli_parse()
 
+        self.tower_url = None
+        self.tower_username = None
+        self.tower_passwd = None
+        self.ssl_verify = False
+
         # Get Config
         self.get_config()
-
+        
         # Calling Functions if defined
         if self.args.ping:
             self.tower_ping()
@@ -52,7 +63,7 @@ class TowerDiagnose(object):
 
     def get_config(self):
 
-        config = ConfigParser.SafeConfigParser()
+        config = cparse.SafeConfigParser()
         config_file = [
             os.path.dirname(os.path.realpath(__file__)) + '/tower.ini',
             "/etc/ansible/tower.ini",
@@ -62,135 +73,113 @@ class TowerDiagnose(object):
 
         if config.has_option('tower', 'url'):
             self.tower_url = config.get('tower', 'url')
-        else:
-            self.tower_url = None
 
         if not self.tower_url:
             warnings.warn("Require Ansible Tower url, eg 'https://tower.example.com'")
 
         if config.has_option('tower', 'username'):
             self.tower_username = config.get('tower', 'username')
-        else:
-            self.tower_username = None
 
         if not self.tower_username:
             warnings.warn("Require Ansible Tower Username.")
 
         if config.has_option('tower', 'password'):
-            self.passwd = config.get('tower', 'password', raw=True)
-        else:
-            self.passwd = None
+            self.tower_passwd = config.get('tower', 'password', raw=True)
 
-        if not self.passwd:
+        if not self.tower_passwd:
             warnings.warn("Require Ansible Tower Password.")
 
         if config.has_option('tower', 'ssl_verify'):
             self.ssl_verify = config.getboolean('tower', 'ssl_verify')
-        else:
-            self.ssl_verify = False
 
 
     def tower_ping(self):
         details = requests.get(self.tower_url + '/api/v2/ping/',
-                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd),
                 verify=self.ssl_verify)
 
         ping_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
 
-        f = open('ping.txt','w')
-        f.write(ping_details)
-        f.close()
+        self.write_file('ping.txt', ping_details)
 
         print('Collected ping endpoint details.')
 
     def tower_settings(self):
         details = requests.get(self.tower_url + '/api/v2/settings/' + self.args.settings + '/',
-                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd),
                 verify=self.ssl_verify)
 
         settings_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
 
-        f = open('settings_' + self.args.settings + '.txt','w')
-        f.write(settings_details)
-        f.close()
+        self.write_file('settings_' + self.args.settings + '.txt', settings_details)
 
         print('Collected Ansible Tower settings on "' + self.args.settings + '"')
 
     def tower_job(self):
         details = requests.get(self.tower_url + '/api/v2/jobs/' + self.args.job + '/', 
-                auth=HTTPBasicAuth(self.tower_username, self.passwd), 
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd), 
                 verify=self.ssl_verify)
 
         job_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
 
-        f = open('job_' + self.args.job + '.txt','w')
-        f.write(job_details)
-        f.close()
+        self.write_file('job_' + self.args.job + '.txt', job_details)
 
         stdout = requests.get(self.tower_url + '/api/v2/jobs/' + self.args.job + '/stdout/?format=txt',
-                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd),
                 verify=self.ssl_verify)
 
-        f = open('job_' + self.args.job + '_stdout.txt','w')
-        f.write(stdout.text)
-        f.close()        
+        self.write_file('job_' + self.args.job + '_stdout.txt', stdout.text)
 
         print('Collected details and stdout of Job ID ' + self.args.job)
 
     def tower_inventory_update(self):
         details = requests.get(self.tower_url + '/api/v2/inventory_updates/' + self.args.inventoryupdate + '/',
-                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd),
                 verify=self.ssl_verify)
 
         inventory_update_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
 
-        f = open('inventory_update_' + self.args.inventoryupdate + '.txt','w')
-        f.write(inventory_update_details)
-        f.close()
+        self.write_file('inventory_update_' + self.args.inventoryupdate + '.txt', inventory_update_details)
 
         stdout = requests.get(self.tower_url + '/api/v2/inventory_updates/' + self.args.inventoryupdate + '/stdout/?format=txt',
-                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd),
                 verify=self.ssl_verify)
 
-        f = open('inventory_update_' + self.args.inventoryupdate + '_stdout.txt','w')
-        f.write(stdout.text)
-        f.close()
+        self.write_file('inventory_update_' + self.args.inventoryupdate + '_stdout.txt', stdout.text)
 
         print('Collected details and stdout of Inventory Update ID ' + self.args.inventoryupdate)
 
     def tower_project_update(self):
         details = requests.get(self.tower_url + '/api/v2/project_updates/' + self.args.projectupdate + '/',
-                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd),
                 verify=self.ssl_verify)
 
         project_update_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
 
-        f = open('project_update_' + self.args.projectupdate + '.txt','w')
-        f.write(project_update_details)
-        f.close()
+        self.write_file('project_update_' + self.args.projectupdate + '.txt', project_update_details)
 
         stdout = requests.get(self.tower_url + '/api/v2/project_updates/' + self.args.projectupdate + '/stdout/?format=txt',
-                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd),
                 verify=self.ssl_verify)
 
-        f = open('project_update_' + self.args.projectupdate + '_stdout.txt','w')
-        f.write(stdout.text)
-        f.close()
+        self.write_file('project_update_' + self.args.projectupdate + '_stdout.txt', stdout.text)
 
         print('Collected details and stdout of Project Update ID ' + self.args.projectupdate)
 
     def tower_workflow_job(self):
         details = requests.get(self.tower_url + '/api/v2/workflow_jobs/' + self.args.workflowjobs + '/',
-                auth=HTTPBasicAuth(self.tower_username, self.passwd),
+                auth=HTTPBasicAuth(self.tower_username, self.tower_passwd),
                 verify=self.ssl_verify)
 
         workflow_job_details = json.dumps(json.loads(details.text), sort_keys=True, indent=4)
 
-        f = open('workflow_job_' + self.args.workflowjobs + '.txt','w')
-        f.write(workflow_job_details)
-        f.close()
+        self.write_file('workflow_job_' + self.args.workflowjobs + '.txt', workflow_job_details)
 
         print('Collected details and stdout of Workflow Job ID ' + self.args.workflowjobs)
 
+    def write_file(self, name, content):
+        f = open(name, 'w')
+        f.write(content)
+        f.close()
 
 TowerDiagnose()
